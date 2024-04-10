@@ -18,7 +18,7 @@ func main() {
 	}
 
 	defer listener.Close()
-
+	storage := NewStorage()
 	fmt.Println("Redis Server is listening on port 6379")
 	for {
 		conn, err := listener.Accept()
@@ -26,11 +26,11 @@ func main() {
 			fmt.Println("Error accepting connection: ", err.Error())
 			continue
 		}
-		go handleConnection(conn)
+		go handleConnection(conn, storage)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, storage *Storage) {
 	defer conn.Close()
 
 	for {
@@ -51,6 +51,21 @@ func handleConnection(conn net.Conn) {
 			str := args[0].GetString()
 			n := len(str)
 			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", n, str)))
+		case "set":
+			key := args[0].GetString()
+			val := args[1].GetString()
+			storage.Set(key, val)
+			okReply := []byte("+OK\r\n")
+			conn.Write(okReply)
+		case "get":
+			key := args[0].GetString()
+			val, ok := storage.Get(key)
+			fmt.Println(val)
+			if !ok {
+				conn.Write([]byte("-1\r\n"))
+			}
+			n := len(val)
+			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", n, val)))
 		}
 	}
 }
