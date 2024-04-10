@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ func main() {
 	}
 
 	defer listener.Close()
+
 	fmt.Println("Redis Server is listening on port 6379")
 	for {
 		conn, err := listener.Accept()
@@ -24,24 +26,31 @@ func main() {
 			fmt.Println("Error accepting connection: ", err.Error())
 			continue
 		}
-		go handleClient(conn)
+		go handleConnection(conn)
 	}
 }
 
-func handleClient(conn net.Conn) {
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	for {
-		buf := make([]byte, 1024)
-
-		n, err := conn.Read(buf)
+		reader := bufio.NewReader(conn)
+		resp, err := DecodeRESP(reader)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error decoding RESP", err.Error())
 			return
 		}
-		fmt.Println(buf[:n])
-		pongReply := []byte("+PONG\r\n")
-		conn.Write(pongReply)
-	}
+		command := resp.List[0].GetString()
+		args := resp.List[1:]
 
+		switch command {
+		case "ping":
+			pongReply := []byte("+PONG\r\n")
+			conn.Write(pongReply)
+		case "echo":
+			str := args[0].GetString()
+			n := len(str)
+			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", n, str)))
+		}
+	}
 }
