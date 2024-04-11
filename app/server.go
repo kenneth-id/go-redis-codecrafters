@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 )
 
 func main() {
@@ -54,7 +55,17 @@ func handleConnection(conn net.Conn, storage *Storage) {
 		case "set":
 			key := args[0].GetString()
 			val := args[1].GetString()
-			storage.Set(key, val)
+			if len(args) > 2 {
+				durationString := fmt.Sprintf("%sms", args[3].GetString())
+				duration, err := time.ParseDuration(durationString)
+				if err != nil {
+					fmt.Println("Error parsing time duration", err)
+				}
+				storage.Set(key, val, duration)
+			} else {
+				storage.Set(key, val, 0)
+
+			}
 			okReply := []byte("+OK\r\n")
 			conn.Write(okReply)
 		case "get":
@@ -62,7 +73,8 @@ func handleConnection(conn net.Conn, storage *Storage) {
 			val, ok := storage.Get(key)
 			fmt.Println(val)
 			if !ok {
-				conn.Write([]byte("-1\r\n"))
+				conn.Write([]byte("$-1\r\n"))
+				continue
 			}
 			n := len(val)
 			conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", n, val)))
