@@ -11,7 +11,16 @@ import (
 )
 
 type ReplicaInfo struct {
-	role string
+	role              string
+	replicationId     string
+	replicationOffset int
+}
+
+func (ri *ReplicaInfo) String() string {
+	return fmt.Sprintf(
+		"role:%s\nmaster_replid:%s\nmaster_repl_offset:%d",
+		ri.role, ri.replicationId, ri.replicationOffset,
+	)
 }
 
 func main() {
@@ -26,6 +35,8 @@ func main() {
 		replicaInfo.role = "slave"
 	} else {
 		replicaInfo.role = "master"
+		replicaInfo.replicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+		replicaInfo.replicationOffset = 0
 	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -85,7 +96,7 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 }
 
 func sendInfo(conn net.Conn, replicaInfo *ReplicaInfo) {
-	info := fmt.Sprintf("role:%s", replicaInfo.role)
+	info := replicaInfo.String()
 	n := len(info)
 	sendResponse(conn, fmt.Sprintf("$%d\r\n%s\r\n", n, info))
 }
