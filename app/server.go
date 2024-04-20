@@ -16,18 +16,16 @@ type ReplicaInfo struct {
 
 func main() {
 	port := flag.Int("port", 6379, "Port to bind the server to.")
-	replicaOf := *flag.String("replicaof", "", "Specify the master host for replication")
+	replicaOf := flag.String("replicaof", "master", "Specify the master host for replication")
+
 	flag.Parse()
 
 	replicaInfo := ReplicaInfo{}
 	args := flag.Args()
-	if replicaOf != "" && len(args) == 1 {
-		replicaInfo.role = "master"
-	} else if replicaOf != "" && len(args) != 1 {
-		fmt.Println("Incorrect usage: Expecting one positional argument for 'replicaof'")
-		os.Exit(1)
-	} else {
+	if *replicaOf != "master" && len(args) == 1 {
 		replicaInfo.role = "slave"
+	} else {
+		replicaInfo.role = "master"
 	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", *port)
@@ -87,8 +85,7 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 }
 
 func sendInfo(conn net.Conn, replicaInfo *ReplicaInfo) {
-	// info := fmt.Sprintf("role:%s", replicaInfo.role)
-	info := "role:master"
+	info := fmt.Sprintf("role:%s", replicaInfo.role)
 	n := len(info)
 	sendResponse(conn, fmt.Sprintf("$%d\r\n%s\r\n", n, info))
 }
