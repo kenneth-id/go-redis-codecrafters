@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -141,4 +142,27 @@ func readUntilCRLF(byteStream *bufio.Reader) ([]byte, error) {
 	}
 
 	return readBytes[:len(readBytes)-2], nil
+}
+
+func EncodeBulkString(data []byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte('$')
+	buf.WriteString(strconv.Itoa(len(data)))
+	buf.WriteString("\r\n")
+	buf.Write(data)
+	buf.WriteString("\r\n")
+	return buf.Bytes()
+}
+
+func EncodeArray(array []RESP) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte('*')
+	buf.WriteString(strconv.Itoa(len(array)))
+	buf.WriteString("\r\n")
+	for _, resp := range array {
+		if resp.Type == BulkString {
+			buf.Write(EncodeBulkString(resp.Bytes))
+		}
+	}
+	return buf.Bytes()
 }

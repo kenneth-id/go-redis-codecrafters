@@ -33,6 +33,18 @@ func main() {
 	args := flag.Args()
 	if *replicaOf != "master" && len(args) == 1 {
 		replicaInfo.role = "slave"
+		masterPort := args[0]
+		address := fmt.Sprintf("0.0.0.0:%s", masterPort)
+		conn, err := net.Dial("tcp", address)
+		if err != nil {
+			logErrorAndExit(fmt.Sprintf("Failed to dial master at port %s", masterPort), err)
+		}
+		pingRESP := RESP{
+			Type:  BulkString,
+			Bytes: []byte("ping"),
+		}
+		resps := []RESP{pingRESP}
+		conn.Write(EncodeArray(resps))
 	} else {
 		replicaInfo.role = "master"
 		replicaInfo.replicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
