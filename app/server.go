@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -12,15 +13,18 @@ func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
 
-	listener, err := net.Listen("tcp", "0.0.0.0:6379")
+	port := flag.Int("port", 6379, "Port to bind the server to.")
+	flag.Parse()
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", *port))
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
+		fmt.Printf("Failed to bind to port %d: %v\n", port, err)
 		os.Exit(1)
 	}
 
 	defer listener.Close()
 	storage := NewStorage()
-	fmt.Println("Redis Server is listening on port 6379")
+	fmt.Printf("Redis Server is listening on port %d \n", *port)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
