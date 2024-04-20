@@ -6,12 +6,29 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
+type ReplicaInfo struct {
+	role string
+}
+
 func main() {
 	port := flag.Int("port", 6379, "Port to bind the server to.")
+	replicaOf := *flag.String("replicaof", "", "Specify the master host for replication")
 	flag.Parse()
+
+	replicaInfo := ReplicaInfo{}
+	args := flag.Args()
+	if replicaOf != "" && len(args) == 1 {
+		replicaInfo.role = "master"
+	} else if replicaOf != "" && len(args) != 1 {
+		fmt.Println("Incorrect usage: Expecting one positional argument for 'replicaof'")
+		os.Exit(1)
+	} else {
+		replicaInfo.role = "slave"
+	}
 
 	address := fmt.Sprintf("0.0.0.0:%d", *port)
 	listener, err := net.Listen("tcp", address)
@@ -23,21 +40,21 @@ func main() {
 	storage := NewStorage()
 	fmt.Printf("Redis Server is listening on %s\n", address)
 
-	acceptConnections(listener, storage)
+	acceptConnections(listener, storage, &replicaInfo)
 }
 
-func acceptConnections(listener net.Listener, storage *Storage) {
+func acceptConnections(listener net.Listener, storage *Storage, replicaInfo *ReplicaInfo) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Printf("Error accepting connection: %v\n", err)
 			continue
 		}
-		go handleConnection(conn, storage)
+		go handleConnection(conn, storage, replicaInfo)
 	}
 }
 
-func handleConnection(conn net.Conn, storage *Storage) {
+func handleConnection(conn net.Conn, storage *Storage, replicaInfo *ReplicaInfo) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
@@ -47,15 +64,14 @@ func handleConnection(conn net.Conn, storage *Storage) {
 			fmt.Printf("Error decoding RESP: %v\n", err)
 			return
 		}
-		executeCommand(conn, resp, storage)
+		executeCommand(conn, resp, storage, replicaInfo)
 	}
 }
 
-func executeCommand(conn net.Conn, resp RESP, storage *Storage) {
+func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *ReplicaInfo) {
 	command := resp.List[0].GetString()
 	args := resp.List[1:]
-
-	switch command {
+	switch strings.ToLower(command) {
 	case "ping":
 		sendResponse(conn, "+PONG\r\n")
 	case "echo":
@@ -65,7 +81,16 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage) {
 		sendResponse(conn, "+OK\r\n")
 	case "get":
 		getKey(conn, storage, args)
+	case "info":
+		sendInfo(conn, replicaInfo)
 	}
+}
+
+func sendInfo(conn net.Conn, replicaInfo *ReplicaInfo) {
+	// info := fmt.Sprintf("role:%s", replicaInfo.role)
+	info := "role:master"
+	n := len(info)
+	sendResponse(conn, fmt.Sprintf("$%d\r\n%s\r\n", n, info))
 }
 
 func echoResponse(conn net.Conn, args []RESP) {
