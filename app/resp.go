@@ -168,3 +168,16 @@ func EncodeArray(array []RESP) []byte {
 	}
 	return buf.Bytes()
 }
+
+func EncodeBulkStringsToArray(strings []string) []byte {
+	resps := make([]RESP, 0, len(strings))
+
+	for _, str := range strings {
+		resps = append(resps, RESP{
+			Type:  BulkString,
+			Bytes: []byte(str),
+		})
+	}
+
+	return EncodeArray(resps)
+}
