@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,17 +35,7 @@ func main() {
 	if *replicaOf != "master" && len(args) == 1 {
 		replicaInfo.role = "slave"
 		masterPort := args[0]
-		address := fmt.Sprintf("0.0.0.0:%s", masterPort)
-		conn, err := net.Dial("tcp", address)
-		if err != nil {
-			logErrorAndExit(fmt.Sprintf("Failed to dial master at port %s", masterPort), err)
-		}
-		pingRESP := RESP{
-			Type:  BulkString,
-			Bytes: []byte("ping"),
-		}
-		resps := []RESP{pingRESP}
-		conn.Write(EncodeArray(resps))
+		go sendHandshake(masterPort, strconv.Itoa(*port))
 	} else {
 		replicaInfo.role = "master"
 		replicaInfo.replicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
@@ -62,6 +53,81 @@ func main() {
 	fmt.Printf("Redis Server is listening on %s\n", address)
 
 	acceptConnections(listener, storage, &replicaInfo)
+}
+
+func sendHandshake(masterPort string, slavePort string) {
+	address := fmt.Sprintf("0.0.0.0:%s", masterPort)
+	conn, err := net.Dial("tcp", address)
+	reader := bufio.NewReader(conn)
+
+	if err != nil {
+		logErrorAndExit(fmt.Sprintf("Failed to dial master at port %s", masterPort), err)
+	}
+	defer conn.Close()
+
+	pingRESP := RESP{
+		Type:  BulkString,
+		Bytes: []byte("ping"),
+	}
+	pingArrayRESP := []RESP{pingRESP}
+	conn.Write(EncodeArray(pingArrayRESP))
+
+	resp1, err := DecodeRESP(reader)
+	if err != nil {
+		fmt.Println("Error decoding handshake response from master")
+	}
+	if resp1.GetString() != "PONG" {
+		fmt.Println("Received invalid response from master:", resp1.GetString())
+		os.Exit(1)
+	}
+
+	respConf1Command := RESP{
+		Type:  BulkString,
+		Bytes: []byte("REPLCONF"),
+	}
+	respConf1ListeningPort := RESP{
+		Type:  BulkString,
+		Bytes: []byte("listening-port"),
+	}
+	respConf1PortNumber := RESP{
+		Type:  BulkString,
+		Bytes: []byte(slavePort),
+	}
+	respConf1ArrayRESP := []RESP{respConf1Command, respConf1ListeningPort, respConf1PortNumber}
+	conn.Write(EncodeArray(respConf1ArrayRESP))
+
+	resp2, err := DecodeRESP(reader)
+	if err != nil {
+		fmt.Println("Error decoding handshake response from master")
+	}
+	if resp2.GetString() != "OK" {
+		fmt.Println("Received invalid response from master:", resp2.GetString())
+		os.Exit(1)
+	}
+
+	respConf2Command := RESP{
+		Type:  BulkString,
+		Bytes: []byte("REPLCONF"),
+	}
+	respConf2ListeningPort := RESP{
+		Type:  BulkString,
+		Bytes: []byte("capa"),
+	}
+	respConf2PortNumber := RESP{
+		Type:  BulkString,
+		Bytes: []byte("psync2"),
+	}
+	respConf2ArrayRESP := []RESP{respConf2Command, respConf2ListeningPort, respConf2PortNumber}
+	conn.Write(EncodeArray(respConf2ArrayRESP))
+
+	resp3, err := DecodeRESP(reader)
+	if err != nil {
+		fmt.Println("Error decoding handshake response from master")
+	}
+	if resp2.GetString() != "OK" {
+		fmt.Println("Received invalid response from master:", resp3.GetString())
+		os.Exit(1)
+	}
 }
 
 func acceptConnections(listener net.Listener, storage *Storage, replicaInfo *ReplicaInfo) {
@@ -99,6 +165,8 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		echoResponse(conn, args)
 	case "set":
 		setKey(storage, args)
+		sendResponse(conn, "+OK\r\n")
+	case "replconf":
 		sendResponse(conn, "+OK\r\n")
 	case "get":
 		getKey(conn, storage, args)

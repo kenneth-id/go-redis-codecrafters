@@ -10,6 +10,8 @@ import (
 
 type Type byte
 
+const CLRF = "\r\n"
+
 const (
 	SimpleString Type = '+'
 	BulkString   Type = '$'
@@ -25,7 +27,7 @@ type RESP struct {
 // String converts RESP  to a string.
 //
 // If RESP  cannot be converted, an empty string is returned.
-func (r RESP) GetString() string {
+func (r *RESP) GetString() string {
 	if r.Type == BulkString || r.Type == SimpleString {
 		return string(r.Bytes)
 	}
@@ -36,7 +38,7 @@ func (r RESP) GetString() string {
 // Array converts RESP  to an array.
 //
 // If RESP  cannot be converted, an empty array is returned.
-func (r RESP) GetArray() []RESP {
+func (r *RESP) GetArray() []RESP {
 	if r.Type == Array {
 		return r.List
 	}
@@ -148,9 +150,9 @@ func EncodeBulkString(data []byte) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte('$')
 	buf.WriteString(strconv.Itoa(len(data)))
-	buf.WriteString("\r\n")
+	buf.WriteString(CLRF)
 	buf.Write(data)
-	buf.WriteString("\r\n")
+	buf.WriteString(CLRF)
 	return buf.Bytes()
 }
 
@@ -158,7 +160,7 @@ func EncodeArray(array []RESP) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte('*')
 	buf.WriteString(strconv.Itoa(len(array)))
-	buf.WriteString("\r\n")
+	buf.WriteString(CLRF)
 	for _, resp := range array {
 		if resp.Type == BulkString {
 			buf.Write(EncodeBulkString(resp.Bytes))
