@@ -95,6 +95,8 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		sendResponse(conn, "+OK\r\n")
 	case "psync":
 		sendResponse(conn, fmt.Sprintf("+FULLRESYNC %s %s\r\n", replicaInfo.replicationId, strconv.Itoa(replicaInfo.replicationOffset)))
+		emptyRdbContent := ConvertRdbFileToByteArr("app/empty_rdb.hex")
+		conn.Write(emptyRdbContent)
 	case "get":
 		getKey(conn, storage, args)
 	case "info":

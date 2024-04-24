@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -13,7 +14,7 @@ func handleHandshake(masterPort string, slavePort string) {
 	reader := bufio.NewReader(conn)
 
 	if err != nil {
-		logErrorAndExit(fmt.Sprintf("Failed to dial master at port %s", masterPort), err)
+		fmt.Printf("Failed to dial master at port %s\n", masterPort)
 	}
 	defer conn.Close()
 
@@ -65,4 +66,27 @@ func handleHandshake(masterPort string, slavePort string) {
 	// if resp2.GetString() != "OK" {
 	// 	fmt.Println("Received invalid response from master:", resp4.GetString())
 	// 	os.Exit(1)
+}
+
+func ConvertRdbFileToByteArr(filePath string) []byte {
+	// Read the contents of the file
+	fileContents, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return nil
+	}
+	// Encode the file contents to hexadecimal
+	hexDecoded := make([]byte, hex.DecodedLen(len(fileContents)))
+	_, err = hex.Decode(hexDecoded, fileContents)
+	if err != nil {
+		fmt.Println("Error decoding:", err)
+		return nil
+	}
+	// Calculate the length of the hexadecimal decoded string
+	hexLength := len(hexDecoded)
+	// Format the data as bytes array
+	formattedData := fmt.Sprintf("$%d\r\n%s", hexLength, hexDecoded)
+	// Convert the formatted data to a byte slice
+	dataBytes := []byte(formattedData)
+	return dataBytes
 }
