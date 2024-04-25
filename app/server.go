@@ -12,9 +12,10 @@ import (
 )
 
 type ReplicaInfo struct {
-	role              string
-	replicationId     string
-	replicationOffset int
+	role               string
+	replicationId      string
+	replicationOffset  int
+	replicaConnections []net.Conn
 }
 
 func (ri *ReplicaInfo) String() string {
@@ -26,36 +27,36 @@ func (ri *ReplicaInfo) String() string {
 
 func main() {
 	port := flag.Int("port", 6379, "Port to bind the server to.")
-	replicaOf := flag.String("replicaof", "master", "Specify the master host for replication")
-
+	replicaOf := flag.String("replicaof", "", "Specify the master host for replication")
 	flag.Parse()
+	args := flag.Args()
 
 	replicaInfo := ReplicaInfo{}
-	args := flag.Args()
-	if *replicaOf != "master" && len(args) == 1 {
+
+	if *replicaOf != "" {
 		replicaInfo.role = "slave"
 		masterPort := args[0]
-		go handleHandshake(masterPort, strconv.Itoa(*port))
+		handleHandshake(masterPort, strconv.Itoa(*port))
 	} else {
 		replicaInfo.role = "master"
 		replicaInfo.replicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
 		replicaInfo.replicationOffset = 0
 	}
 
+	storage := NewStorage()
+
+	acceptConnections(storage, &replicaInfo, port)
+}
+
+func acceptConnections(storage *Storage, replicaInfo *ReplicaInfo, port *int) {
 	address := fmt.Sprintf("0.0.0.0:%d", *port)
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		logErrorAndExit(fmt.Sprintf("Failed to bind to port %d", *port), err)
 	}
+	fmt.Printf("Redis Server is listening on %s\n", address)
 	defer listener.Close()
 
-	storage := NewStorage()
-	fmt.Printf("Redis Server is listening on %s\n", address)
-
-	acceptConnections(listener, storage, &replicaInfo)
-}
-
-func acceptConnections(listener net.Listener, storage *Storage, replicaInfo *ReplicaInfo) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -90,10 +91,15 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		echoResponse(conn, args)
 	case "set":
 		setKey(storage, args)
-		sendResponse(conn, "+OK\r\n")
+		if replicaInfo.role == "master" {
+			handlePropagation(command, args, replicaInfo)
+			sendResponse(conn, "+OK\r\n")
+		}
 	case "replconf":
 		sendResponse(conn, "+OK\r\n")
+
 	case "psync":
+		replicaInfo.replicaConnections = append(replicaInfo.replicaConnections, conn)
 		sendResponse(conn, fmt.Sprintf("+FULLRESYNC %s %s\r\n", replicaInfo.replicationId, strconv.Itoa(replicaInfo.replicationOffset)))
 		emptyRdbContent := ConvertRdbFileToByteArr("app/empty_rdb.hex")
 		conn.Write(emptyRdbContent)
@@ -101,6 +107,13 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		getKey(conn, storage, args)
 	case "info":
 		sendInfo(conn, replicaInfo)
+	}
+}
+
+func handlePropagation(command string, args []RESP, replicaInfo *ReplicaInfo) {
+	for _, conn := range replicaInfo.replicaConnections {
+		toPropagate := append([]RESP{RESP{Type: BulkString, Bytes: []byte(command)}}, args...)
+		conn.Write(EncodeArray(toPropagate))
 	}
 }
 
