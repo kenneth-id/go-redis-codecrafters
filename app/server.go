@@ -32,18 +32,17 @@ func main() {
 	args := flag.Args()
 
 	replicaInfo := ReplicaInfo{}
+	storage := NewStorage()
 
 	if *replicaOf != "" {
 		replicaInfo.role = "slave"
 		masterPort := args[0]
-		handleHandshake(masterPort, strconv.Itoa(*port))
+		go handleHandshake(storage, &replicaInfo, masterPort, strconv.Itoa(*port))
 	} else {
 		replicaInfo.role = "master"
 		replicaInfo.replicationId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
 		replicaInfo.replicationOffset = 0
 	}
-
-	storage := NewStorage()
 
 	acceptConnections(storage, &replicaInfo, port)
 }
@@ -90,6 +89,9 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 	case "echo":
 		echoResponse(conn, args)
 	case "set":
+		if replicaInfo.role == "slave" {
+			fmt.Println("replica is setting key", args[0].GetString())
+		}
 		setKey(storage, args)
 		if replicaInfo.role == "master" {
 			handlePropagation(command, args, replicaInfo)

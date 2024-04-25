@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
 
-func handleHandshake(masterPort string, slavePort string) {
+func handleHandshake(storage *Storage, replicaInfo *ReplicaInfo, masterPort string, slavePort string) {
 	address := fmt.Sprintf("0.0.0.0:%s", masterPort)
 	conn, err := net.Dial("tcp", address)
 	reader := bufio.NewReader(conn)
@@ -16,7 +17,7 @@ func handleHandshake(masterPort string, slavePort string) {
 	if err != nil {
 		fmt.Printf("Failed to dial master at port %s\n", masterPort)
 	}
-	defer conn.Close()
+	// defer conn.Close()
 
 	pingRESP := RESP{
 		Type:  BulkString,
@@ -63,9 +64,17 @@ func handleHandshake(masterPort string, slavePort string) {
 		fmt.Println("Error decoding handshake response from master")
 	}
 	fmt.Println(resp4.GetString())
-	// if resp2.GetString() != "OK" {
-	// 	fmt.Println("Received invalid response from master:", resp4.GetString())
-	// 	os.Exit(1)
+
+	// Hardcoded to 92 to read exactly the empty RDB file
+	emptyRdb := make([]byte, 92)
+	n, err := io.ReadFull(reader, emptyRdb)
+	if err != nil {
+		fmt.Println("Error decoding RDB file from master")
+	}
+	fmt.Println("Length of empty RDB", n)
+	fmt.Println(string(emptyRdb))
+
+	go handleConnection(conn, storage, replicaInfo)
 }
 
 func ConvertRdbFileToByteArr(filePath string) []byte {
