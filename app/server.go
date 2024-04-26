@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -73,8 +74,10 @@ func handleConnection(conn net.Conn, storage *Storage, replicaInfo *ReplicaInfo)
 	for {
 		resp, err := DecodeRESP(reader)
 		if err != nil {
-			fmt.Printf("Error decoding RESP: %v\n", err)
-			return
+			if err != io.EOF {
+				fmt.Printf("Error decoding RESP: %v\n", err)
+			}
+			continue
 		}
 		executeCommand(conn, resp, storage, replicaInfo)
 	}
@@ -83,6 +86,7 @@ func handleConnection(conn net.Conn, storage *Storage, replicaInfo *ReplicaInfo)
 func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *ReplicaInfo) {
 	command := resp.List[0].GetString()
 	args := resp.List[1:]
+
 	switch strings.ToLower(command) {
 	case "ping":
 		sendResponse(conn, "+PONG\r\n")
@@ -90,7 +94,7 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		echoResponse(conn, args)
 	case "set":
 		if replicaInfo.role == "slave" {
-			fmt.Println("replica is setting key", args[0].GetString())
+			fmt.Println("Replica is setting key", args[0].GetString())
 		}
 		setKey(storage, args)
 		if replicaInfo.role == "master" {
@@ -98,8 +102,16 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 			sendResponse(conn, "+OK\r\n")
 		}
 	case "replconf":
-		sendResponse(conn, "+OK\r\n")
-
+		fmt.Println(replicaInfo.role)
+		fmt.Println(command)
+		fmt.Println(args[0].GetString())
+		fmt.Println(args[1].GetString())
+		if args[0].GetString() == "GETACK" {
+			fmt.Println("Replica gets getack")
+			conn.Write(EncodeBulkStringsToArray([]string{"REPLCONF", "ACK", "0"}))
+		} else {
+			sendResponse(conn, "+OK\r\n")
+		}
 	case "psync":
 		replicaInfo.replicaConnections = append(replicaInfo.replicaConnections, conn)
 		sendResponse(conn, fmt.Sprintf("+FULLRESYNC %s %s\r\n", replicaInfo.replicationId, strconv.Itoa(replicaInfo.replicationOffset)))
@@ -109,12 +121,14 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		getKey(conn, storage, args)
 	case "info":
 		sendInfo(conn, replicaInfo)
+	default:
+		fmt.Println("Unknown command")
 	}
 }
 
 func handlePropagation(command string, args []RESP, replicaInfo *ReplicaInfo) {
 	for _, conn := range replicaInfo.replicaConnections {
-		toPropagate := append([]RESP{RESP{Type: BulkString, Bytes: []byte(command)}}, args...)
+		toPropagate := append([]RESP{{Type: BulkString, Bytes: []byte(command)}}, args...)
 		conn.Write(EncodeArray(toPropagate))
 	}
 }

@@ -60,6 +60,8 @@ func DecodeRESP(byteStream *bufio.Reader) (RESP, error) {
 		return decodeBulkString(byteStream)
 	case "*":
 		return decodeArray(byteStream)
+	default:
+		fmt.Println("Undecodeable RESP from connection")
 	}
 
 	return RESP{}, fmt.Errorf("invalid RESP data type byte: %s", string(dataTypeByte))
