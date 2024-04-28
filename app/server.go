@@ -132,7 +132,7 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 	case "info":
 		sendInfo(conn, replicaInfo)
 	case "wait":
-		sendResponse(conn, fmt.Sprintf(":%d\r\n", 0))
+		sendResponse(conn, fmt.Sprintf(":%d\r\n", len(replicaInfo.replicaConnections)))
 	default:
 		fmt.Println("Unknown command")
 	}
