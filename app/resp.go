@@ -16,6 +16,7 @@ const (
 	SimpleString Type = '+'
 	BulkString   Type = '$'
 	Array        Type = '*'
+	Integer      Type = ':'
 )
 
 type RESP struct {
