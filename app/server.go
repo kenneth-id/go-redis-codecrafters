@@ -59,17 +59,17 @@ func acceptConnections(storage *Storage, replicaInfo *ReplicaInfo, port *int) {
 
 	for {
 		conn, err := listener.Accept()
+		reader := bufio.NewReader(conn)
 		if err != nil {
 			fmt.Printf("Error accepting connection: %v\n", err)
 			continue
 		}
-		go handleConnection(conn, storage, replicaInfo)
+		go handleConnection(conn, reader, storage, replicaInfo)
 	}
 }
 
-func handleConnection(conn net.Conn, storage *Storage, replicaInfo *ReplicaInfo) {
+func handleConnection(conn net.Conn, reader *bufio.Reader, storage *Storage, replicaInfo *ReplicaInfo) {
 	defer conn.Close()
-	reader := bufio.NewReader(conn)
 
 	for {
 		resp, err := DecodeRESP(reader)

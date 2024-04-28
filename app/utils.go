@@ -66,8 +66,7 @@ func handleHandshake(storage *Storage, replicaInfo *ReplicaInfo, masterPort stri
 	fmt.Println(resp4.GetString())
 
 	// Read RDB content
-	emptyRdbContent := ConvertRdbFileToByteArr("app/empty_rdb.hex")
-	emptyRdb := make([]byte, len(emptyRdbContent))
+	emptyRdb := make([]byte, 93)
 	n, err := io.ReadFull(reader, emptyRdb)
 	if err != nil {
 		fmt.Println("Error decoding RDB file from master")
@@ -75,7 +74,7 @@ func handleHandshake(storage *Storage, replicaInfo *ReplicaInfo, masterPort stri
 	fmt.Println("Length of empty RDB", n)
 	fmt.Printf("%q\n", emptyRdb)
 
-	handleConnection(conn, storage, replicaInfo)
+	handleConnection(conn, reader, storage, replicaInfo)
 }
 
 func ConvertRdbFileToByteArr(filePath string) []byte {
