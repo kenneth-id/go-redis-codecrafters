@@ -37,6 +37,7 @@ func main() {
 
 	if *replicaOf != "" {
 		replicaInfo.role = "slave"
+		replicaInfo.replicationOffset = 0
 		masterPort := args[0]
 		go handleHandshake(storage, &replicaInfo, masterPort, strconv.Itoa(*port))
 	} else {
@@ -87,14 +88,22 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 	command := resp.List[0].GetString()
 	args := resp.List[1:]
 
+	numBytes := len(EncodeArray(resp.GetArray()))
+
+	curReplicationOffset := replicaInfo.replicationOffset
 	switch strings.ToLower(command) {
 	case "ping":
-		sendResponse(conn, "+PONG\r\n")
+		if replicaInfo.role == "master" {
+			sendResponse(conn, "+PONG\r\n")
+		} else {
+			replicaInfo.replicationOffset += numBytes
+		}
 	case "echo":
 		echoResponse(conn, args)
 	case "set":
 		if replicaInfo.role == "slave" {
 			fmt.Println("Replica is setting key", args[0].GetString())
+			replicaInfo.replicationOffset += numBytes
 		}
 		setKey(storage, args)
 		if replicaInfo.role == "master" {
@@ -108,7 +117,8 @@ func executeCommand(conn net.Conn, resp RESP, storage *Storage, replicaInfo *Rep
 		fmt.Println(args[1].GetString())
 		if args[0].GetString() == "GETACK" {
 			fmt.Println("Replica gets getack")
-			conn.Write(EncodeBulkStringsToArray([]string{"REPLCONF", "ACK", "0"}))
+			conn.Write(EncodeBulkStringsToArray([]string{"REPLCONF", "ACK", strconv.Itoa(curReplicationOffset)}))
+			replicaInfo.replicationOffset += numBytes
 		} else {
 			sendResponse(conn, "+OK\r\n")
 		}
